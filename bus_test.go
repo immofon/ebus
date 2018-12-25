@@ -9,14 +9,14 @@ import (
 func Test_Bus(t *testing.T) {
 	bus := New()
 	bus.SetAfterEmit(func(e Event) {
-		fmt.Println(e.Topic, ":", e.Data)
+		fmt.Println(e.Topic, ":", e.Topic)
 	})
 
 	go func(bus *Bus) {
 		for range time.NewTicker(time.Millisecond * 10).C {
 			e := bus.Get()
 			if e.Topic != "" {
-				fmt.Println("Handle:", e.Topic, ":", e.Data)
+				fmt.Println("Handle:", e.Topic, ":", e.Topic)
 				bus.Delete()
 			}
 		}

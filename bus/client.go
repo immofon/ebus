@@ -35,12 +35,13 @@ func (c *Client) Serve() {
 
 		var e ebus.Event
 		for {
-			err := c.conn.ReadJSON(&e)
+			_, raw, err := c.conn.ReadMessage()
 			if err != nil {
 				return
 			}
+			e = e.ClientUnmarshal(string(raw))
 
-			fmt.Println(e.Topic, ":", e.Data)
+			fmt.Println(e.From, ":[", e.Topic, "]:", e.Data)
 		}
 	}()
 
@@ -51,17 +52,17 @@ func (c *Client) Serve() {
 
 func (c *Client) Emit(e ebus.Event) {
 	c.ch <- func(c *Client) {
-		c.conn.WriteJSON(e)
+		c.conn.WriteMessage(websocket.TextMessage, []byte(e.ClientMarshal()))
 	}
 }
 
-func main() {
+func client() {
 	c := NewClient("ws://localhost:8100/")
 	go c.Serve()
 
-	var topic, data string
+	var to, data string
 	for {
-		fmt.Scanf("%s %s", &topic, &data)
-		c.Emit(ebus.E(topic, data))
+		fmt.Scanf("%s %s", &to, &data)
+		c.Emit(ebus.E(to, "chat", data))
 	}
 }

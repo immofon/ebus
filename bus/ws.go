@@ -200,7 +200,7 @@ func serve() {
 			channel := channels[e.Topic]
 			for id := range channel {
 				manager.Emit(ebus.Event{
-					From:  e.From,
+					From:  "@pub",
 					To:    id,
 					Topic: "#" + e.Topic,
 					Data:  e.Data,

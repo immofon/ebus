@@ -1,7 +1,10 @@
 package main
 
 import (
+	"bufio"
 	"fmt"
+	"os"
+	"strings"
 
 	"github.com/gorilla/websocket"
 	"github.com/immofon/ebus"
@@ -16,19 +19,22 @@ type Client struct {
 }
 
 // panic: dial websocket
-func NewClient(url string) *Client {
+func NewClient(url string, emit func(ebus.Event)) *Client {
 	conn, _, err := websocket.DefaultDialer.Dial(url, nil)
 	if err != nil {
 		panic(err)
 	}
-	return &Client{
+	c := &Client{
 		ch: make(chan updateClientFn),
 
 		conn: conn,
 	}
+	go c.Serve(emit)
+
+	return c
 }
 
-func (c *Client) Serve() {
+func (c *Client) Serve(emit func(ebus.Event)) {
 	go func() {
 		defer close(c.ch)
 		defer c.conn.Close()
@@ -41,7 +47,7 @@ func (c *Client) Serve() {
 			}
 			e = e.ClientUnmarshal(string(raw))
 
-			fmt.Println(e.From, ":[", e.Topic, "]:", e.Data)
+			emit(e)
 		}
 	}()
 
@@ -57,12 +63,29 @@ func (c *Client) Emit(e ebus.Event) {
 }
 
 func client() {
-	c := NewClient("ws://localhost:8100/")
-	go c.Serve()
+	c := NewClient("ws://localhost:8100/", func(e ebus.Event) {
+		fmt.Println(e.From, ":[", e.Topic, "]:", e.Data)
+	})
 
-	var to, data string
-	for {
-		fmt.Scanf("%s %s", &to, &data)
-		c.Emit(ebus.E(to, "chat", data))
+	help()
+	scanner := bufio.NewScanner(os.Stdin)
+	for scanner.Scan() {
+		raw := strings.Split(scanner.Text(), " ") // Println will add back the final '\n'
+		if len(raw) >= 2 {
+			c.Emit(ebus.Event{
+				To:    raw[0],
+				Topic: raw[1],
+				Data:  raw[2:],
+			})
+		} else {
+			help()
+		}
 	}
+	if err := scanner.Err(); err != nil {
+		fmt.Fprintln(os.Stderr, "reading standard input:", err)
+	}
+}
+
+func help() {
+	fmt.Println("to topic [data1 data2 ...")
 }

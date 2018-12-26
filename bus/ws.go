@@ -85,7 +85,7 @@ func (m *Manager) Provide(method string, rpc RPCHandler) {
 	m.Lock()
 	defer m.Unlock()
 
-	m.rpcs["@"+method] = rpc
+	m.rpcs[method] = rpc
 }
 func (m *Manager) ProvideFunc(method string, fn RPCHandleFunc) {
 	m.Provide(method, fn)
@@ -142,7 +142,7 @@ func (m *Manager) emit(e ebus.Event) {
 			agent.Box.Emit(e)
 		}
 	case '@':
-		rpc := m.rpcs[e.To]
+		rpc := m.rpcs[e.To[1:]]
 		if rpc != nil {
 			rpc.Call(e, m.emit)
 		}

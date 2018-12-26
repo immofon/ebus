@@ -137,13 +137,6 @@ func (m *Manager) emit(e ebus.Event) {
 		if agent != nil {
 			agent.Box.Emit(e)
 		}
-	case '#':
-		m.emit(ebus.Event{
-			From:  e.From,
-			To:    "@pub",
-			Topic: e.To[1:],
-			Data:  e.Data,
-		})
 	case '@':
 		rpc := m.rpcs[e.To]
 		if rpc != nil {
@@ -187,6 +180,14 @@ func serve() {
 			}
 		}
 	}
+	getChannel := func(cid string) map[string]bool {
+		ch := make(chan map[string]bool)
+		defer close(ch)
+		tasks <- func() {
+			ch <- channels[cid]
+		}
+		return <-ch
+	}
 
 	manager := NewManager()
 	manager.ProvideFunc("join", func(e ebus.Event, emit func(ebus.Event)) {
@@ -197,20 +198,16 @@ func serve() {
 	})
 	manager.ProvideFunc("pub", func(e ebus.Event, emit func(ebus.Event)) {
 		tasks <- func() {
-			channel := channels[e.Topic]
-			for id := range channel {
-				manager.Emit(ebus.Event{
+			for id := range getChannel(e.Topic) {
+				emit(ebus.Event{
 					From:  "@pub",
 					To:    id,
-					Topic: "#" + e.Topic,
+					Topic: e.Topic,
 					Data:  e.Data,
 				})
 			}
 		}
 	})
-	// TODO
-	//manager.ProvideFunc("pub/with-cache", func(e ebus.Event, emit func(ebus.Event)) {
-	//})
 
 	http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
 		conn, err := upgrader.Upgrade(w, r, nil)
@@ -241,7 +238,7 @@ func serve() {
 					func() {
 						for {
 							e := agent.Box.Get()
-							if e.Topic == "" {
+							if e.From == "" || e.Topic == "" {
 								return
 							}
 

@@ -63,6 +63,9 @@ type Manager struct {
 	nextId int
 	agents map[string]*Agent
 	rpcs   map[string]RPCHandler
+
+	//analysis
+	eventCount int
 }
 
 func NewManager() *Manager {
@@ -131,6 +134,7 @@ func (m *Manager) Emit(e ebus.Event) {
 }
 
 func (m *Manager) emit(e ebus.Event) {
+	m.eventCount++
 	switch e.To[0] {
 	case '&':
 		agent := m.agents[e.To]
@@ -142,9 +146,9 @@ func (m *Manager) emit(e ebus.Event) {
 		if rpc != nil {
 			rpc.Call(e, m.emit)
 		}
-		fmt.Println("rpc:", e)
 	default:
 		fmt.Println("discard:", e)
+		m.eventCount--
 	}
 }
 
@@ -197,16 +201,22 @@ func serve() {
 		leave(e.Topic, e.From)
 	})
 	manager.ProvideFunc("pub", func(e ebus.Event, emit func(ebus.Event)) {
-		tasks <- func() {
-			for id := range getChannel(e.Topic) {
-				emit(ebus.Event{
-					From:  "@pub",
-					To:    id,
-					Topic: e.Topic,
-					Data:  e.Data,
-				})
-			}
+		for id := range getChannel(e.Topic) {
+			emit(ebus.Event{
+				From:  "@pub",
+				To:    id,
+				Topic: e.Topic,
+				Data:  e.Data,
+			})
 		}
+	})
+	manager.ProvideFunc("analysis", func(e ebus.Event, emit func(ebus.Event)) {
+		emit(ebus.Event{
+			From:  "@analysis",
+			To:    e.From,
+			Topic: "event_count",
+			Data:  []string{fmt.Sprint(manager.eventCount)},
+		})
 	})
 
 	http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {

@@ -207,8 +207,10 @@ func serve() {
 				})
 			}
 		}
-
 	})
+	// TODO
+	//manager.ProvideFunc("pub/with-cache", func(e ebus.Event, emit func(ebus.Event)) {
+	//})
 
 	http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
 		conn, err := upgrader.Upgrade(w, r, nil)

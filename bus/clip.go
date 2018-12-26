@@ -9,7 +9,11 @@ import (
 )
 
 func clip() {
-	c := NewClient("ws://localhost:8100/", func(e ebus.Event) {
+	defer func() {
+		recover()
+	}()
+
+	c := NewClient("ws://39.105.42.45:8100/", func(e ebus.Event) {
 	})
 
 	ch := make(chan string)

@@ -13,7 +13,9 @@ func main() {
 	case "client", "c":
 		client()
 	case "clip":
-		clip()
+		for {
+			clip()
+		}
 	default:
 		fmt.Println("help:")
 		fmt.Println(os.Args[0], "server")

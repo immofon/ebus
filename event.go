@@ -19,11 +19,11 @@ func E(to, topic string, data ...string) Event {
 }
 
 func marshal(target, topic string, data []string) string {
-	return strings.Join([]string{target, topic, strings.Join(data, "\031")}, "\031")
+	return strings.Join([]string{target, topic, strings.Join(data, "\x1f")}, "\x1f")
 }
 
 func unmarshal(raw string) (target, topic string, data []string) {
-	rawsp := strings.Split(raw, "\031")
+	rawsp := strings.Split(raw, "\x1f")
 	target = rawsp[0]
 	topic = rawsp[1]
 	data = rawsp[2:]

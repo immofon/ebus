@@ -13,7 +13,8 @@ func clip() {
 		recover()
 	}()
 
-	c := NewClient("ws://39.105.42.45:8100/", func(e ebus.Event) {
+	//c := NewClient("ws://39.105.42.45:8100/", func(e ebus.Event) {
+	c := NewClient("ws://localhost:8100/", func(e ebus.Event) {
 	})
 
 	ch := make(chan string)
@@ -23,9 +24,9 @@ func clip() {
 	for s := range ch {
 		if s != cache {
 			c.Emit(ebus.Event{
-				To:    "#clip",
-				Topic: "#clip",
-				Data:  []string{s},
+				To:    "@record",
+				Topic: "set",
+				Data:  []string{"clip", s},
 			})
 			cache = s
 		}

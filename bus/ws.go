@@ -11,14 +11,14 @@ import (
 	"github.com/immofon/mlog"
 )
 
-type RPCHandler interface {
-	Call(e ebus.Event, emit func(ebus.Event))
+type ServiceHandler interface {
+	Call(e ebus.Event)
 }
 
-type RPCHandleFunc func(e ebus.Event, emit func(ebus.Event))
+type ServiceHandleFunc func(e ebus.Event)
 
-func (fn RPCHandleFunc) Call(e ebus.Event, emit func(ebus.Event)) {
-	fn(e, emit)
+func (fn ServiceHandleFunc) Call(e ebus.Event) {
+	fn(e)
 }
 
 var upgrader = websocket.Upgrader{
@@ -29,9 +29,55 @@ var upgrader = websocket.Upgrader{
 	},
 }
 
+type JoinedGroup struct {
+	sync.Mutex
+
+	groups map[string]bool // group id
+}
+
+func NewJoinedGroup() *JoinedGroup {
+	return &JoinedGroup{
+		groups: make(map[string]bool),
+	}
+}
+
+func (g *JoinedGroup) Join(group_id string) {
+	if g == nil {
+		return
+	}
+	g.Lock()
+	defer g.Unlock()
+
+	g.groups[group_id] = true
+}
+func (g *JoinedGroup) Leave(group_id string) {
+	if g == nil {
+		return
+	}
+	g.Lock()
+	defer g.Unlock()
+
+	delete(g.groups, group_id)
+}
+func (g *JoinedGroup) All() []string {
+	if g == nil {
+		return nil
+	}
+
+	g.Lock()
+	defer g.Unlock()
+
+	all := make([]string, 0, len(g.groups))
+	for id := range g.groups {
+		all = append(all, id)
+	}
+	return all
+}
+
 type Agent struct {
-	Notify <-chan bool
-	Box    *ebus.Bus
+	Notify      <-chan bool
+	Box         *ebus.Bus
+	JoinedGroup *JoinedGroup
 
 	onclose func()
 }
@@ -39,8 +85,9 @@ type Agent struct {
 func NewAgent() *Agent {
 	notify := make(chan bool, 1)
 	agent := &Agent{
-		Notify: notify,
-		Box:    ebus.New(),
+		Notify:      notify,
+		Box:         ebus.New(),
+		JoinedGroup: NewJoinedGroup(),
 
 		onclose: func() {
 			close(notify)
@@ -57,12 +104,17 @@ func NewAgent() *Agent {
 	return agent
 }
 
+type Group map[string]bool
+
 type Manager struct {
 	sync.Mutex
 
 	nextId int
 	agents map[string]*Agent
-	rpcs   map[string]RPCHandler
+
+	services map[string]ServiceHandler
+
+	groups map[string]Group
 
 	//analysis
 	eventCount int
@@ -70,14 +122,17 @@ type Manager struct {
 
 func NewManager() *Manager {
 	return &Manager{
-		nextId: 1,
-		agents: make(map[string]*Agent),
-		rpcs:   make(map[string]RPCHandler),
+		nextId:   1,
+		agents:   make(map[string]*Agent),
+		services: make(map[string]ServiceHandler),
+		groups:   make(map[string]Group),
+
+		eventCount: 0,
 	}
 }
 
 // method without @ prefix
-func (m *Manager) Provide(method string, rpc RPCHandler) {
+func (m *Manager) Provide(method string, rpc ServiceHandler) {
 	if strings.HasPrefix(method, "@") {
 		panic(method)
 	}
@@ -85,9 +140,9 @@ func (m *Manager) Provide(method string, rpc RPCHandler) {
 	m.Lock()
 	defer m.Unlock()
 
-	m.rpcs[method] = rpc
+	m.services[method] = rpc
 }
-func (m *Manager) ProvideFunc(method string, fn RPCHandleFunc) {
+func (m *Manager) ProvideFunc(method string, fn ServiceHandleFunc) {
 	m.Provide(method, fn)
 }
 
@@ -142,9 +197,9 @@ func (m *Manager) emit(e ebus.Event) {
 			agent.Box.Emit(e)
 		}
 	case '@':
-		rpc := m.rpcs[e.To[1:]]
+		rpc := m.services[e.To[1:]]
 		if rpc != nil {
-			rpc.Call(e, m.emit)
+			rpc.Call(e)
 		}
 	default:
 		fmt.Println("discard:", e)
@@ -152,66 +207,164 @@ func (m *Manager) emit(e ebus.Event) {
 	}
 }
 
+func (m *Manager) join(group_id, agent_id string) {
+	agent := m.agents[agent_id]
+	if agent == nil {
+		return
+	}
+
+	group, ok := m.groups[group_id]
+	if !ok {
+		group = make(Group)
+		m.groups[group_id] = group
+	}
+
+	group[agent_id] = true
+	agent.JoinedGroup.Join(group_id)
+}
+
+func (m *Manager) leave(group_id, agent_id string) {
+	agent := m.agents[agent_id]
+	if agent == nil {
+		return
+	}
+	agent.JoinedGroup.Leave(group_id)
+
+	group, ok := m.groups[group_id]
+	if !ok {
+		return
+	}
+
+	delete(group, agent_id)
+}
+
+func (m *Manager) boardcast(group_id string, e ebus.Event) {
+	group := m.groups[group_id]
+	for agent_id := range group {
+		e.To = agent_id
+		m.emit(e)
+	}
+}
+
+type RecordStore struct {
+	sync.Mutex
+
+	Data map[string]string
+}
+
+func NewRecordStore() *RecordStore {
+	return &RecordStore{
+		Data: make(map[string]string),
+	}
+}
+
+func (rs *RecordStore) WithLock(fn func(rs *RecordStore)) {
+	rs.Lock()
+	rs.Unlock()
+	fn(rs)
+}
+
 func serve() {
 	mlog.TextMode()
 
-	tasks := make(chan func(), 100)
-	go func() {
-		for task := range tasks {
-			task()
-		}
-	}()
-	channels := make(map[string](map[string]bool))
-	join := func(cid, id string) {
-		tasks <- func() {
-			channel, ok := channels[cid]
-			if !ok {
-				channel = make(map[string]bool)
-				channels[cid] = channel
-			}
-
-			channel[id] = true
-		}
-	}
-	leave := func(cid, id string) {
-		tasks <- func() {
-			channel, ok := channels[cid]
-			if ok {
-				delete(channel, id)
-				if len(channel) == 0 {
-					delete(channels, cid)
-				}
-			}
-		}
-	}
-	getChannel := func(cid string) map[string]bool {
-		ch := make(chan map[string]bool)
-		defer close(ch)
-		tasks <- func() {
-			ch <- channels[cid]
-		}
-		return <-ch
-	}
-
 	manager := NewManager()
-	manager.ProvideFunc("join", func(e ebus.Event, emit func(ebus.Event)) {
-		join(e.Topic, e.From)
+	manager.ProvideFunc("manage", func(e ebus.Event) {
+		fmt.Println(e)
+		switch e.Topic {
+		case "disconnected":
+			for _, gid := range manager.agents[e.From].JoinedGroup.All() {
+				manager.leave(gid, e.From)
+			}
+		}
 	})
-	manager.ProvideFunc("leave", func(e ebus.Event, emit func(ebus.Event)) {
-		leave(e.Topic, e.From)
+	manager.ProvideFunc("join", func(e ebus.Event) {
+		group_id := e.Topic
+		if group_id == "" {
+			return
+		}
+		manager.join(group_id, e.From)
 	})
-	manager.ProvideFunc("pub", func(e ebus.Event, emit func(ebus.Event)) {
-		for id := range getChannel(e.Topic) {
-			emit(ebus.Event{
-				From:  "@pub",
-				To:    id,
+	manager.ProvideFunc("leave", func(e ebus.Event) {
+		group_id := e.Topic
+		if group_id == "" {
+			return
+		}
+		manager.leave(group_id, e.From)
+	})
+	manager.ProvideFunc("boardcast", func(e ebus.Event) {
+		group_id := e.Topic
+		if group_id == "" {
+			return
+		}
+		e.From = "@boardcast"
+		manager.boardcast(group_id, e)
+	})
+
+	// record
+	rs := NewRecordStore()
+	manager.ProvideFunc("record", func(e ebus.Event) {
+		switch e.Topic {
+		case "set":
+			if len(e.Data) != 2 {
+				return
+			}
+			k := e.Data[0]
+			v := e.Data[1]
+			needBoardcast := false
+			rs.WithLock(func(rs *RecordStore) {
+				old := rs.Data[k]
+				if old != v {
+					needBoardcast = true
+				}
+				rs.Data[k] = v
+			})
+
+			if needBoardcast {
+				manager.boardcast("@record/"+k, ebus.Event{
+					From:  "@record",
+					Topic: "set",
+					Data:  []string{k, v},
+				})
+			}
+		case "get":
+		case "sync":
+			if len(e.Data) != 1 {
+				return
+			}
+			k := e.Data[0]
+			v := ""
+			rs.WithLock(func(rs *RecordStore) {
+				v = rs.Data[k]
+			})
+			manager.emit(ebus.Event{
+				From:  "@record",
+				To:    e.From,
+				Topic: "set",
+				Data:  []string{k, v},
+			})
+			manager.join("@record/"+k, e.From)
+			//case "unsync":
+		}
+	})
+
+	manager.ProvideFunc("status", func(e ebus.Event) {
+		switch e.Topic {
+		case "agents":
+			var agents []string
+			for agent := range manager.agents {
+				agents = append(agents, agent)
+			}
+
+			manager.emit(ebus.Event{
+				From:  "@status",
+				To:    e.From,
 				Topic: e.Topic,
-				Data:  e.Data,
+				Data:  agents,
 			})
 		}
 	})
-	manager.ProvideFunc("analysis", func(e ebus.Event, emit func(ebus.Event)) {
-		emit(ebus.Event{
+	manager.ProvideFunc("analysis", func(e ebus.Event) {
+		manager.emit(ebus.Event{
 			From:  "@analysis",
 			To:    e.From,
 			Topic: "event_count",
@@ -230,10 +383,15 @@ func serve() {
 		id := manager.AddAgent(agent)
 		defer manager.Remove(id)
 
-		agent.Box.Emit(ebus.Event{
-			From:  "@manager",
-			Topic: "@set.id",
-			Data:  []string{id},
+		manager.Emit(ebus.Event{
+			From:  id,
+			To:    "@manage",
+			Topic: "connected",
+		})
+		defer manager.Emit(ebus.Event{
+			From:  id,
+			To:    "@manage",
+			Topic: "disconnected",
 		})
 
 		// send loop

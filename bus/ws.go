@@ -361,15 +361,14 @@ func serve() {
 				Topic: e.Topic,
 				Data:  agents,
 			})
+		case "event_count":
+			manager.emit(ebus.Event{
+				From:  "@status",
+				To:    e.From,
+				Topic: e.Topic,
+				Data:  []string{fmt.Sprint(manager.eventCount)},
+			})
 		}
-	})
-	manager.ProvideFunc("analysis", func(e ebus.Event) {
-		manager.emit(ebus.Event{
-			From:  "@analysis",
-			To:    e.From,
-			Topic: "event_count",
-			Data:  []string{fmt.Sprint(manager.eventCount)},
-		})
 	})
 
 	http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {

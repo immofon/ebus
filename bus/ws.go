@@ -326,8 +326,7 @@ func serve() {
 					Data:  []string{k, v},
 				})
 			}
-		case "get":
-		case "sync":
+		case "get", "sync":
 			if len(e.Data) != 1 {
 				return
 			}
@@ -342,8 +341,9 @@ func serve() {
 				Topic: "set",
 				Data:  []string{k, v},
 			})
-			manager.join("@record/"+k, e.From)
-			//case "unsync":
+			if e.Topic == "sync" {
+				manager.join("@record/"+k, e.From)
+			}
 		}
 	})
 

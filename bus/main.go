@@ -5,6 +5,18 @@ import (
 	"os"
 )
 
+var ServerURL = getenv("SERVER_URL", "ws://localhost:8100/")
+var ServeAddr = getenv("SERVE_ADDR", "localhost:8100")
+
+func getenv(key, deft string) string {
+	v := os.Getenv(key)
+	if v == "" {
+		return deft
+	}
+	return v
+
+}
+
 func main() {
 	cmd := os.Args[1]
 	switch cmd {

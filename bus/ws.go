@@ -435,6 +435,6 @@ func serve() {
 
 	})
 
-	mlog.L().Info("serve :8100")
-	http.ListenAndServe("localhost:8100", nil)
+	mlog.L().Info("serve " + ServeAddr)
+	http.ListenAndServe(ServeAddr, nil)
 }

@@ -11,7 +11,6 @@ import (
 
 func client() {
 	c := ebus.NewClient(ServerURL, func(e ebus.Event) {
-		//c := NewClient("ws://localhost:8100/", func(e ebus.Event) {
 		fmt.Println(e.From, ":[", e.Topic, "]:", e.Data)
 	})
 

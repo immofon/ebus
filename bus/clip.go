@@ -14,7 +14,6 @@ func clip() {
 	}()
 
 	c := ebus.NewClient(ServerURL, func(e ebus.Event) {
-		//c := NewClient("ws://localhost:8100/", func(e ebus.Event) {
 	})
 
 	ch := make(chan string)
@@ -31,10 +30,6 @@ func clip() {
 			cache = s
 		}
 	}
-}
-
-func say(s string) {
-	exec.Command("/Users/yangjingrong/dev/bin/push", s).Run()
 }
 
 func generate(ch chan<- string) {

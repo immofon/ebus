@@ -13,7 +13,7 @@ func clip() {
 		recover()
 	}()
 
-	c := NewClient("ws://39.105.42.45:8100/", func(e ebus.Event) {
+	c := ebus.NewClient("ws://39.105.42.45:8100/", func(e ebus.Event) {
 		//c := NewClient("ws://localhost:8100/", func(e ebus.Event) {
 	})
 

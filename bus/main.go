@@ -31,6 +31,10 @@ func main() {
 		for {
 			clip()
 		}
+	case "test":
+		for {
+			test()
+		}
 	default:
 		fmt.Println("help:")
 		fmt.Println(os.Args[0], "server")

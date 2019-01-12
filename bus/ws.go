@@ -435,5 +435,11 @@ func serve() {
 	})
 
 	mlog.L().Info("serve " + ServeAddr)
-	http.ListenAndServe(ServeAddr, nil)
+
+	if ServeSSL == "on" {
+		mlog.L().Info("open ssl")
+		mlog.L().Error(http.ListenAndServeTLS(ServeAddr, SSLCert, SSLKey, nil))
+	} else {
+		mlog.L().Error(http.ListenAndServe(ServeAddr, nil))
+	}
 }

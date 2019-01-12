@@ -7,7 +7,7 @@ import (
 
 var ServerURL = getenv("SERVER_URL", "ws://localhost:8100/")
 var ServeAddr = getenv("SERVE_ADDR", "localhost:8100")
-var ServeSSL = getenv("SERVE_SSL", "off") // set "on" to open
+var ServeSSL = getenv("SSL", "off") // set "on" to open
 var SSLCert = getenv("SSL_CERT", "")
 var SSLKey = getenv("SSL_KEY", "")
 

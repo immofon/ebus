@@ -35,6 +35,10 @@ func main() {
 		for {
 			test()
 		}
+	case "monitor":
+		for {
+			monitor()
+		}
 	default:
 		fmt.Println("help:")
 		fmt.Println(os.Args[0], "server")

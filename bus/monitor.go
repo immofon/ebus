@@ -8,7 +8,7 @@ import (
 	"github.com/immofon/ebus"
 )
 
-func test() {
+func monitor() {
 	defer func() {
 		recover()
 	}()
@@ -53,10 +53,10 @@ func test() {
 		}
 	})
 
-	for {
+	for range time.NewTicker(time.Second).C {
 		c.Emit(ebus.Event{
-			To:    "@test",
-			Topic: "t",
+			To:    "@status",
+			Topic: "event_count",
 		})
 	}
 }

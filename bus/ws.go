@@ -236,6 +236,10 @@ func (m *Manager) leave(group_id, agent_id string) {
 	}
 
 	delete(group, agent_id)
+
+	if len(group) == 0 {
+		delete(m.groups, group_id)
+	}
 }
 
 func (m *Manager) boardcast(group_id string, e ebus.Event) {

@@ -260,7 +260,7 @@ func NewRecordStore() *RecordStore {
 
 func (rs *RecordStore) WithLock(fn func(rs *RecordStore)) {
 	rs.Lock()
-	rs.Unlock()
+	defer rs.Unlock()
 	fn(rs)
 }
 
